@@ -19,6 +19,9 @@ function gridInputToIndices(gridInput) {
   return { row: rowIndex, col: columnIndex };
 }
 
+const HIT = "⭕";
+const WHITE_SPACE = "⬜";
+
 const shipSizeDictionary = {
   A: 5, // Aircraft Carrier
   B: 4, // Battleship
@@ -33,6 +36,22 @@ const shipAbvDictionary = {
   D: "🇩",
   S: "🇸",
   P: "🇵",
+};
+
+const shipNamesDictionary = {
+  A: "Aircraft Carrier",
+  B: "Battleship",
+  D: "Destroyer",
+  S: "Submarine",
+  P: "Patrol Boat",
+};
+
+const emojiToShipDict = {
+  "🇦": "A",
+  "🇧": "B",
+  "🇩": "D",
+  "🇸": "S",
+  "🇵": "P",
 };
 
 function copyGrid(original) {
@@ -68,8 +87,6 @@ function displayGrid(grid) {
 
     output += "\n";
   }
-
-  console.log(output);
   return output;
 }
 
@@ -77,7 +94,7 @@ function isValidPosition(grid, position) {
   if (position.x < 0 || position.x > grid.length - 1) return false;
   if (position.y < 0 || position.y > grid[0].length - 1) return false;
 
-  return grid[position.x][position.y] == "⬜";
+  return grid[position.x][position.y] == WHITE_SPACE;
 }
 
 // Function to create an embed with the 10x10 grid
@@ -97,6 +114,30 @@ function createGridEmbed(player, grid) {
   //   }
 
   return embed;
+}
+
+function createGridEmbedCustomName(name, grid) {
+  const embed = new EmbedBuilder()
+    .setColor("#3498db") // Set the color of the embed (you can change this)
+    .setTitle(`${name}`)
+    .setDescription(displayGrid(grid));
+  //   //   // Add rows with row number and grid data
+  //   for (let i = 0; i < grid.length; i++) {
+  //     const rowLabel = `${i + 1}`.padStart(2, "0"); // Pad single-digit numbers with a leading zero
+  //     embed.addFields({
+  //       name: grid[i].join(" "),
+  //       value: "",
+  //       inline: false,
+  //     });
+  //   }
+
+  return embed;
+}
+
+function sendPlayersBoardToChannel(channel, name, grid) {
+  channel.send({
+    embeds: [createGridEmbedCustomName(name, grid)],
+  });
 }
 
 function sendPlayersBoard(player, grid) {
@@ -168,6 +209,7 @@ function placeShips(grid) {
    */
   let remainingShips = ["A", "B", "D", "S", "P"];
   let modifiedGrid = copyGrid(grid);
+  let ships = [];
 
   while (remainingShips.length > 0) {
     const ship = remainingShips.shift();
@@ -175,9 +217,10 @@ function placeShips(grid) {
       let valid = false;
       let tempGrid = copyGrid(modifiedGrid);
       const randomPosition = randomPositionOnGrid(grid);
+      let shipPositions = [];
 
       if (!isValidPosition(tempGrid, randomPosition)) {
-        console.log("Invalid position trying again");
+        //console.log("Invalid position trying again");
         continue;
       }
 
@@ -192,16 +235,22 @@ function placeShips(grid) {
         for (let step = 0; step < steps; step++) {
           position = moveInDirection[direction](position.x, position.y);
           if (!isValidPosition(tempGrid, position)) {
+            shipPositions = [];
             tempGrid = copyGrid(modifiedGrid);
             continue;
           }
-          console.log(position.x, position.y);
+          shipPositions.push(position);
+          // console.log(position.x, position.y);
           tempGrid[position.x][position.y] = shipAbvDictionary[ship];
           count++;
         }
 
         if (count >= shipSizeDictionary[ship]) {
           valid = true;
+          ships.push({
+            ship,
+            positions: shipPositions,
+          });
           //displayGrid(tempGrid);
           break;
         }
@@ -214,16 +263,76 @@ function placeShips(grid) {
     }
   }
 
-  return modifiedGrid;
+  return { modifiedGrid, ships };
 }
 
-function attemptHit(cell, targetBoard, targetPlayer, shootingPlayer) {
+function attemptHit(
+  position,
+  targetBoards,
+  { target, targetIndex },
+  { shooter, shooterIndex }
+) {
+  // console.log(shootingPlayer, targetPlayer);
+
+  let cellResult = targetBoards.player_board[position.row][position.col];
+
+  console.log(cellResult);
+
   // cell is a white space meaning no ship
-  if (cell == "⬜") {
-    return false;
+  if (cellResult == WHITE_SPACE) {
+    return {
+      status: "MISS",
+    };
   }
 
-  return true;
+  // get the ship type
+  const ship = emojiToShipDict[cellResult];
+
+  console.log(position);
+
+  // change the emoji to a hit
+  targetBoards.hit_board.grid[position.row][position.col] = HIT;
+  targetBoards.hit_board.safe_grid[position.row][position.col] = HIT;
+
+  let sunk = false;
+
+  targetBoards.hit_board.ships.forEach((ele) => {
+    if (ele.ship == ship) {
+      let cells = shipSizeDictionary[ship];
+      console.log(cells);
+      // go though the entire positions and find it we have sunk this ship
+      ele.positions.forEach((pos) => {
+        if (targetBoards.hit_board.grid[pos.x][pos.y] == HIT) {
+          cells--;
+        }
+      });
+
+      if (cells <= 0) {
+        console.log("ship has been sunk");
+        sunk = true;
+      }
+    }
+  });
+
+  if (sunk) {
+    instance.shipConditions[targetIndex][ship] = "sunk";
+    return {
+      status: "SUNK",
+      ship: shipNamesDictionary[ship],
+    };
+  }
+
+  return {
+    status: "HIT",
+  };
+}
+
+function updatePlayers(message) {
+  sendPlayersBoardToChannel(
+    message.channel,
+    instance.players[instance.currentPlayerIndex].tag + " board",
+    instance.boards[instance.currentPlayerIndex].hit_board.safe_grid
+  );
 }
 
 function startGame(rows, columns, interaction, currentPlayers) {
@@ -247,19 +356,50 @@ function startGame(rows, columns, interaction, currentPlayers) {
 
   currentPlayers.forEach((element) => {
     const grid = createGrid();
-    let modifiedGrid = placeShips(grid);
+    const { modifiedGrid, ships } = placeShips(grid);
+    console.log(ships.length);
     displayGrid(modifiedGrid);
     sendPlayersBoard(element, modifiedGrid);
-    instance.boards.push(modifiedGrid);
+
+    instance.boards.push({
+      player_board: copyGrid(modifiedGrid),
+      hit_board: {
+        grid: copyGrid(modifiedGrid),
+        safe_grid: copyGrid(grid),
+        ships,
+      },
+    });
+
+    console.log(ships);
+
+    instance.shipConditions.push({
+      A: "alive",
+      B: "alive",
+      D: "alive",
+      S: "alive",
+      P: "alive",
+    });
   });
+
+  console.log(instance.boards);
 
   instance.running = true;
   (instance.players = currentPlayers),
     (instance.currentPlayerIndex = 0),
-    interaction.channel.send(`Message when you want to start`);
+    interaction.channel.send(
+      `${
+        instance.players[instance.currentPlayerIndex]
+      } will start first, reply when you want to start`
+    );
 }
 
-function endGame() {}
+function endGame(interaction, winner, loser) {
+  console.log("Game over");
+  interaction.channel.send(
+    `Congratulations ${winner} you won!\nBetter luck next time ${loser}`
+  );
+  instance.running = false;
+}
 
 module.exports = {
   startGame,
@@ -267,4 +407,8 @@ module.exports = {
   instance,
   gridInputToIndices,
   attemptHit,
+  shipNamesDictionary,
+  shipAbvDictionary,
+  shipSizeDictionary,
+  updatePlayers,
 };

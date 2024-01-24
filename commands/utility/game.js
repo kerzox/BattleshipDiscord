@@ -7,19 +7,13 @@ const exampleEmbed = new EmbedBuilder()
   .setTitle("Battleship Game")
   .setAuthor({ name: "kerzox" })
   .setDescription("Classic battleship in discord messages")
-  .addFields(
-    { name: "Regular field title", value: "Some value here" },
-    { name: "\u200B", value: "\u200B" },
-    { name: "Inline field title", value: "Some value here", inline: true },
-    { name: "Inline field title", value: "Some value here", inline: true }
-  )
   .addFields({
-    name: "Inline field title",
-    value: "Some value here",
-    inline: true,
+    name: "React to this to play",
+    value: "The First two people to react will play",
+    inline: false,
   })
   .setTimestamp()
-  .setFooter({ text: "Some footer text here" });
+  .setFooter({ text: "Made by kerzox" });
 
 module.exports = {
   data: new SlashCommandBuilder()

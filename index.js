@@ -4,7 +4,7 @@ const { Client, Collection, Events, GatewayIntentBits } = require("discord.js");
 const { token } = require("./config.json");
 
 const Game = require("./battleship.js");
-const { running, getNextPlayer } = require("./game.js");
+const { running, getNextPlayer, currentPlayerIndex } = require("./game.js");
 
 const client = new Client({
   intents: [
@@ -84,37 +84,108 @@ client.on("messageCreate", (message) => {
       time: 60000,
     });
 
+    let switchPlayer = true;
+
     collector.on("collect", (msg) => {
-      let index = Game.instance.currentPlayerIndex;
       if (filterPlayer(msg)) {
-        console.log(msg.content);
-        let pos = Game.gridInputToIndices(msg.content);
-        console.log(pos);
-        let cell =
-          Game.instance.boards[Game.instance.getNextPlayer(index)][pos.row][
-            pos.col
-          ];
-        if (
-          Game.attemptHit(
-            cell,
+        if (!Game.instance.stalled) {
+          let index = Game.instance.currentPlayerIndex;
+          let pos = Game.gridInputToIndices(msg.content);
+          if (pos == null || pos == undefined) {
+            switchPlayer = false;
+            return message.channel.send("Invalid coordinate!");
+          }
+          let result = Game.attemptHit(
+            pos,
             Game.instance.boards[Game.instance.getNextPlayer(index)],
-            Game.instance.players[Game.instance.getNextPlayer(index)],
-            Game.instance.players[index]
-          )
-        ) {
-          Game.instance.currentPlayerIndex = Game.instance.getNextPlayer(index);
-          return message.channel.send("Thats a hit!");
+            {
+              target: Game.instance.players[Game.instance.getNextPlayer(index)],
+              targetIndex: Game.instance.getNextPlayer(index),
+            },
+            {
+              shooter: Game.instance.players[Game.instance.players[index]],
+              shooterIndex: Game.instance.players[index],
+            }
+          );
+
+          if (result.status == "HIT") {
+            return message.channel.send("Thats a hit!");
+          } else if (result.status == "MISS") {
+            return message.channel.send("Thats a miss!");
+          } else if (result.status == "SUNK") {
+            return message.channel.send(
+              `${Game.instance.players[index]} has sunk ${
+                Game.instance.players[Game.instance.getNextPlayer(index)]
+              }'s ${result.ship}`
+            );
+          }
         } else {
-          Game.instance.currentPlayerIndex = Game.instance.getNextPlayer(index);
-          return message.channel.send("Thats a miss!");
+          if (msg.content == "unpause") {
+            Game.instance.stalled = false;
+          }
         }
       }
     });
 
     collector.on("end", (collected, reason) => {
-      message.channel.send(
-        `${Game.instance.players[Game.instance.currentPlayerIndex]} you're up`
-      );
+      if (reason == "time") {
+        if (!Game.instance.stalled) {
+          message.channel.send("Game is on hold, send unpause to continue");
+        }
+        Game.instance.stalled = true;
+      } else {
+        // check if a player has won
+
+        let canContinue = false;
+        console.log(
+          Game.instance.shipConditions[
+            Game.instance.getNextPlayer(Game.instance.currentPlayerIndex)
+          ]
+        );
+
+        Object.keys(Game.shipNamesDictionary).forEach((ship) => {
+          console.log(
+            Game.instance.shipConditions[
+              Game.instance.getNextPlayer(Game.instance.currentPlayerIndex)
+            ][ship]
+          );
+          if (
+            Game.instance.shipConditions[
+              Game.instance.getNextPlayer(Game.instance.currentPlayerIndex)
+            ][ship] == "alive"
+          ) {
+            canContinue = true;
+          }
+        });
+
+        if (!canContinue) {
+          Game.instance.running = Game.endGame(
+            message,
+            Game.instance.players[Game.instance.currentPlayerIndex],
+            Game.instance.players[
+              Game.instance.getNextPlayer(Game.instance.currentPlayerIndex)
+            ]
+          );
+          return message.channel.send("Display embed later can't be bothered");
+        }
+
+        let board = Game.instance.boards[Game.instance.currentPlayerIndex];
+
+        if (switchPlayer) {
+          // switch to next player
+          Game.instance.currentPlayerIndex = Game.instance.getNextPlayer(
+            Game.instance.currentPlayerIndex
+          );
+        }
+
+        message.channel.send(
+          `${Game.instance.players[Game.instance.currentPlayerIndex]} you're up`
+        );
+
+          Game.updatePlayers(message);
+
+        switchPlayer = false;
+      }
     });
   }
 });
