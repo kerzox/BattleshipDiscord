@@ -19,7 +19,8 @@ function gridInputToIndices(gridInput) {
   return { row: rowIndex, col: columnIndex };
 }
 
-const HIT = "⭕";
+const MISS = "⚫";
+const HIT = "🔴";
 const WHITE_SPACE = "⬜";
 
 const shipSizeDictionary = {
@@ -280,6 +281,9 @@ function attemptHit(
 
   // cell is a white space meaning no ship
   if (cellResult == WHITE_SPACE) {
+    targetBoards.hit_board.grid[position.row][position.col] = MISS;
+    targetBoards.hit_board.safe_grid[position.row][position.col] = MISS;
+
     return {
       status: "MISS",
     };
