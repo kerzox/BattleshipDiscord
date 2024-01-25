@@ -354,6 +354,8 @@ function startGame(rows, columns, interaction, currentPlayers) {
 
   */
 
+  instance.clear();
+
   currentPlayers.forEach((element) => {
     const grid = createGrid();
     const { modifiedGrid, ships } = placeShips(grid);
@@ -379,6 +381,8 @@ function startGame(rows, columns, interaction, currentPlayers) {
       S: "alive",
       P: "alive",
     });
+
+    instance.onFirstMessage = true;
   });
 
   console.log(instance.boards);
@@ -389,16 +393,17 @@ function startGame(rows, columns, interaction, currentPlayers) {
     interaction.channel.send(
       `${
         instance.players[instance.currentPlayerIndex]
-      } will start first, reply when you want to start`
+      } will start first\nType and send out a Grid Coordinate to attack the enemies ships!`
     );
 }
 
 function endGame(interaction, winner, loser) {
-  console.log("Game over");
-  interaction.channel.send(
-    `Congratulations ${winner} you won!\nBetter luck next time ${loser}`
-  );
-  instance.running = false;
+  if (winner != undefined && loser != undefined) {
+    interaction.channel.send(
+      `Congratulations ${winner} you won!\nBetter luck next time ${loser}`
+    );
+  }
+  instance.clear();
 }
 
 module.exports = {

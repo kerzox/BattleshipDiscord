@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-const { startGame } = require("../../battleship.js");
+const Game = require("../../battleship.js");
 
 const exampleEmbed = new EmbedBuilder()
   .setColor(0x0099ff)
@@ -25,21 +25,22 @@ module.exports = {
       fetchReply: true,
     });
 
-    const collectorFilter = (reaction, user) => {
-      return user.id === interaction.user.id;
-    };
-
-    let stop = false;
-
     message
       .awaitReactions({
         max: 2,
-        time: 10_000,
+        time: 30_000,
         errors: ["time"],
       })
       .then((collected) => {
         const reaction = collected.first();
-        if (collected.size == 2) {
+
+        // two ways to find collection
+        // the same reaction twice
+        // two different reactions
+
+        if (collected.size == 0) return;
+        let count = collected.size == 2 ? collected.size : reaction.count;
+        if (count == 2) {
           message.reply("Starting game");
 
           let currentPlayers = [];
@@ -52,7 +53,7 @@ module.exports = {
 
           console.log(currentPlayers);
 
-          startGame(10, 10, message, currentPlayers);
+          Game.startGame(10, 10, message, currentPlayers);
         }
       })
       .catch((collected) => {

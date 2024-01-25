@@ -73,8 +73,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on("messageCreate", (message) => {
-  if (message.author.bot) return;
+  console.log(Game.instance);
+  if (!Game.instance.onFirstMessage && message.author.bot) {
+    console.log("word");
+    return;
+  }
   if (Game.instance.running) {
+    Game.instance.onFirstMessage = false;
     const filterPlayer = (m) =>
       m.author.id ===
       Game.instance.players[Game.instance.currentPlayerIndex].id;
@@ -88,6 +93,10 @@ client.on("messageCreate", (message) => {
 
     collector.on("collect", (msg) => {
       if (filterPlayer(msg)) {
+        if (!Game.instance.running) {
+          collector.stop();
+          return;
+        }
         if (!Game.instance.stalled) {
           let index = Game.instance.currentPlayerIndex;
           let pos = Game.gridInputToIndices(msg.content);
@@ -128,6 +137,10 @@ client.on("messageCreate", (message) => {
     });
 
     collector.on("end", (collected, reason) => {
+      if (!Game.instance.running) {
+        collector.stop();
+        return;
+      }
       if (reason == "time") {
         if (!Game.instance.stalled) {
           message.channel.send("Game is on hold, send unpause to continue");
@@ -166,6 +179,7 @@ client.on("messageCreate", (message) => {
               Game.instance.getNextPlayer(Game.instance.currentPlayerIndex)
             ]
           );
+          collector.stop();
           return message.channel.send("Display embed later can't be bothered");
         }
 
@@ -182,7 +196,7 @@ client.on("messageCreate", (message) => {
           `${Game.instance.players[Game.instance.currentPlayerIndex]} you're up`
         );
 
-          Game.updatePlayers(message);
+        Game.updatePlayers(message);
 
         switchPlayer = false;
       }
